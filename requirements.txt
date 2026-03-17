@@ -1,0 +1,22 @@
+# Google ADK
+google-adk
+
+# LiteLLM for Claude via AWS Bedrock
+litellm
+
+# MCP SDK
+mcp
+
+# HTTP client for API calls
+httpx
+
+# Environment variables
+python-dotenv
+
+# AWS SDK for Bedrock
+boto3
+botocore
+
+# ASGI server for SSE transport
+uvicorn
+starlette
