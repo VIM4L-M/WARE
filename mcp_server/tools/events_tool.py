@@ -77,7 +77,7 @@ async def get_events(location: str, limit: int = 2) -> dict:
                 f"{BASE_URL}/events.json",
                 params={
                     "apikey": TICKETMASTER_API_KEY,
-                    "city": location,
+                    "keyword" : location,
                     "size": limit,
                     "sort": "date,asc",
                 }

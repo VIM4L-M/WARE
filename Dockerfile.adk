@@ -1,0 +1,18 @@
+# Use official Python 3.11 slim image
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY coordinator_agent/ ./coordinator_agent/
+COPY sub_agents/ ./sub_agents/
+COPY mcp_server/ ./mcp_server/
+
+ENV PYTHONPATH=/app
+
+EXPOSE 8000
+
+# ← KEY FIX: use . instead of coordinator_agent path
+CMD ["adk", "web", "--host", "0.0.0.0", "--port", "8000", "."]

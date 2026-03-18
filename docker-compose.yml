@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: mcp-server
+    ports:
+      - "8001:8001"
+    environment:
+      - OPENWEATHERMAP_API_KEY=${OPENWEATHERMAP_API_KEY}
+      - TICKETMASTER_API_KEY=${TICKETMASTER_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    networks:
+      - agent-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 8001)); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  adk-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.adk
+    container_name: adk-web
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENWEATHERMAP_API_KEY=${OPENWEATHERMAP_API_KEY}
+      - TICKETMASTER_API_KEY=${TICKETMASTER_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - MODEL_ID=groq/llama-3.3-70b-versatile
+      - MCP_SERVER_URL=http://mcp-server:8001/sse
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+networks:
+  agent-network:
+    driver: bridge
