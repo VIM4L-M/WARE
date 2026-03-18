@@ -61,69 +61,64 @@ TEMP_LAYER_ADVICE = {
 
 
 async def get_events(location: str, limit: int = 2) -> dict:
-    """
-    Fetches upcoming events near a given location using Ticketmaster API.
-
-    Args:
-        location: City name or keyword to search events near
-        limit: Maximum number of events to return (default 2)
-
-    Returns:
-        dict with list of upcoming events near the location
-    """
     async with httpx.AsyncClient() as client:
         try:
+            # First try with full location
             response = await client.get(
                 f"{BASE_URL}/events.json",
                 params={
                     "apikey": TICKETMASTER_API_KEY,
-                    "keyword" : location,
+                    "keyword": location,
                     "size": limit,
                     "sort": "date,asc",
                 }
             )
 
-            if response.status_code != 200:
-                return {
-                    "error": f"Could not fetch events for '{location}'",
-                    "status_code": response.status_code,
-                    "events": []
-                }
-
             data = response.json()
             raw_events = data.get("_embedded", {}).get("events", [])
+
+            # If no events found, extract country and retry
+            if not raw_events:
+                # Extract country from location (e.g. "Chennai, India" → "India")
+                parts = location.split(",")
+                if len(parts) > 1:
+                    country = parts[-1].strip()
+                    retry_response = await client.get(
+                        f"{BASE_URL}/events.json",
+                        params={
+                            "apikey": TICKETMASTER_API_KEY,
+                            "keyword": country,
+                            "size": limit,
+                            "sort": "date,asc",
+                        }
+                    )
+                    data = retry_response.json()
+                    raw_events = data.get("_embedded", {}).get("events", [])
 
             if not raw_events:
                 return {
                     "location": location,
                     "events": [],
-                    "message": f"No upcoming events found near {location}"
+                    "message": f"No upcoming events found near {location} on Ticketmaster. Ticketmaster has limited coverage outside the US."
                 }
 
             events = []
             for event in raw_events[:limit]:
-                # Get event category/classification
                 classifications = event.get("classifications", [{}])
-                segment = classifications[0].get("segment", {}).get("name", "").lower() if classifications else ""
+                segment = classifications[0].get("segment", {}).get("name", "").lower() if classifications else "music"
                 genre = classifications[0].get("genre", {}).get("name", "").lower() if classifications else ""
-
-                # Get venue info
                 venues = event.get("_embedded", {}).get("venues", [{}])
                 venue = venues[0] if venues else {}
-
-                # Get date info
                 dates = event.get("dates", {}).get("start", {})
-                event_date = dates.get("localDate", "TBD")
-                event_time = dates.get("localTime", "TBD")
 
                 events.append({
                     "name": event.get("name", "Unknown Event"),
-                    "date": event_date,
-                    "time": event_time,
+                    "date": dates.get("localDate", "TBD"),
+                    "time": dates.get("localTime", "TBD"),
                     "venue": venue.get("name", "Unknown Venue"),
                     "address": venue.get("address", {}).get("line1", ""),
                     "city": venue.get("city", {}).get("name", location),
-                    "segment": segment,
+                    "segment": segment if segment else "music",
                     "genre": genre,
                     "url": event.get("url", ""),
                     "price_range": (
@@ -143,52 +138,3 @@ async def get_events(location: str, limit: int = 2) -> dict:
                 "error": str(e),
                 "events": []
             }
-
-
-async def suggest_event_outfit(event_type: str, temperature_celsius: float) -> dict:
-    """
-    Suggests an outfit suitable for a specific event type and current weather.
-
-    Args:
-        event_type: Type/segment of the event (e.g. "music", "sports", "arts")
-        temperature_celsius: Current temperature in Celsius to factor in weather
-
-    Returns:
-        dict with outfit suggestion tailored to both the event and weather
-    """
-
-    # Match event type to outfit map
-    event_key = "default"
-    for key in EVENT_OUTFIT_MAP:
-        if key in event_type.lower():
-            event_key = key
-            break
-
-    outfit = EVENT_OUTFIT_MAP[event_key]
-
-    # Get temperature layer advice
-    layer_advice = ""
-    for level, (threshold, advice) in TEMP_LAYER_ADVICE.items():
-        if temperature_celsius >= threshold:
-            layer_advice = advice
-            break
-    if not layer_advice:
-        layer_advice = TEMP_LAYER_ADVICE["very_cold"][1]
-
-    # Decide casual vs formal based on event type
-    is_formal = event_key in ["theatre", "arts"]
-    outfit_items = outfit["formal"] if is_formal else outfit["casual"]
-
-    return {
-        "event_type": event_type,
-        "temperature_celsius": temperature_celsius,
-        "outfit_style": "formal" if is_formal else "casual",
-        "recommended_items": outfit_items,
-        "event_description": outfit["description"],
-        "weather_layer_advice": layer_advice,
-        "summary": (
-            f"For a {event_type} event, we recommend: {', '.join(outfit_items)}. "
-            f"{outfit['description']}. "
-            f"{layer_advice}."
-        )
-    }
